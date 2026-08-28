@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.hf_cache/
+data/worldtrack_dense/
+data/tracking_gt/**/*.npz
+external/
+predictions/
+results/

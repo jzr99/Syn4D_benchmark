@@ -1,0 +1,37 @@
+{
+  "v-dpm": {
+    "display_name": "V-DPM",
+    "official_repo": "https://github.com/eldar/vdpm",
+    "revision": "5e2a57cf6007dfb0511a8b396a0805089b9edcc4",
+    "runner": "adapters/run_vdpm.py",
+    "tasks": ["tracking", "depth", "pose"]
+  },
+  "any4d": {
+    "display_name": "Any4D",
+    "official_repo": "https://github.com/Any-4D/Any4D",
+    "revision": "aa9f1b0d7ecdf44a6ef8cef93387be0093bdd497",
+    "runner": "adapters/run_any4d.py",
+    "tasks": ["tracking", "depth", "pose"]
+  },
+  "traceanything": {
+    "display_name": "TraceAnything",
+    "official_repo": "https://github.com/ByteDance-Seed/TraceAnything",
+    "revision": "54677b5e7bf11510c2e8c917a509988ad379f8eb",
+    "runner": "adapters/run_traceanything.py",
+    "tasks": ["tracking"]
+  },
+  "st4rtrack": {
+    "display_name": "St4RTrack",
+    "official_repo": "https://github.com/HavenFeng/St4RTrack",
+    "revision": "0f9a3f44a7ebac76600cd31ec9eea5228ad7db91",
+    "runner": "adapters/run_st4rtrack.py",
+    "tasks": ["tracking"]
+  },
+  "spatrackerv2": {
+    "display_name": "SpaTrackerV2",
+    "official_repo": "https://github.com/henry123-boy/SpaTrackerV2",
+    "revision": "7e12274c52077860cebfe007a6290777db43b63c",
+    "runner": "adapters/run_spatrackerv2.py",
+    "tasks": ["tracking", "depth", "pose"]
+  }
+}
