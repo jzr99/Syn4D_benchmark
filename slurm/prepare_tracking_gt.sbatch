@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-BENCHMARK_DIR="${BENCHMARK_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+BENCHMARK_DIR="${BENCHMARK_DIR:-${SLURM_SUBMIT_DIR:-$(pwd)}}"
 PYTHON="${PYTHON:-/scratch/shared/beegfs/zeren/conda/envs/d4rt/bin/python}"
 VARIANTS=(mixed mixed_no_bedlam og sim)
 TASK_ID="${SLURM_ARRAY_TASK_ID:?submit this script with --array=0-3}"

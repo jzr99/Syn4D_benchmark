@@ -75,22 +75,50 @@ def _camera_poses(predictions) -> np.ndarray:
     return np.stack(poses)
 
 
-def _extract(result, tracking_root: Path, record, tasks: set[str]) -> dict[str, np.ndarray]:
-    predictions = [result[f"pred{index + 1}"] for index in range(len(record.frame_indices))]
-    c2w = _camera_poses(predictions)
+def _extract_chunks(result_chunks, tracking_root: Path, record, tasks: set[str]) -> dict[str, np.ndarray]:
+    """Stitch anchor-preserving chunks into one frame-0 coordinate system."""
+    num_frames = len(record.frame_indices)
+    depths: list[np.ndarray | None] = [None] * num_frames
+    poses: list[np.ndarray | None] = [None] * num_frames
+    tracks: list[np.ndarray | None] = [None] * num_frames
+    model_hw = None
+    anchor_seen = False
+
+    for result, global_indices in result_chunks:
+        predictions = [result[f"pred{index + 1}"] for index in range(len(global_indices))]
+        chunk_c2w = _camera_poses(predictions)
+        chunk_to_ref0 = np.linalg.inv(chunk_c2w[0])
+        base = numpy(predictions[0]["pts3d"])[0]
+        if model_hw is None:
+            model_hw = base.shape[:2]
+        elif tuple(model_hw) != tuple(base.shape[:2]):
+            raise ValueError(f"Any4D changed image shape between chunks: {model_hw} vs {base.shape[:2]}")
+        query = query_pixels(tracking_root, record, base.shape[:2]) if "tracking" in tasks else None
+
+        for local_index, global_index in enumerate(global_indices):
+            if local_index == 0 and anchor_seen:
+                continue
+            pred = predictions[local_index]
+            if "pose" in tasks:
+                poses[global_index] = chunk_to_ref0 @ chunk_c2w[local_index]
+            if "depth" in tasks:
+                depths[global_index] = numpy(pred["pts3d_cam"])[0, ..., 2]
+            if "tracking" in tasks:
+                field = base if local_index == 0 else base + numpy(pred["scene_flow"])[0]
+                sampled = sample_nearest(field, query)
+                tracks[global_index] = points_world_to_ref0(sampled, chunk_c2w[0])
+        anchor_seen = True
+        # Release this chunk's GPU tensors before the generator starts the
+        # next forward pass.
+        del pred, predictions, result
+
     arrays: dict[str, np.ndarray] = {}
     if "pose" in tasks:
-        arrays["camera_c2w"] = c2w.astype(np.float32)
+        arrays["camera_c2w"] = np.stack(poses).astype(np.float32)
     if "depth" in tasks:
-        arrays["depth"] = np.stack([numpy(pred["pts3d_cam"])[0, ..., 2] for pred in predictions]).astype(np.float32)
+        arrays["depth"] = np.stack(depths).astype(np.float32)
     if "tracking" in tasks:
-        base = numpy(predictions[0]["pts3d"])[0]
-        query = query_pixels(tracking_root, record, base.shape[:2])
-        fields = [base]
-        for pred in predictions[1:]:
-            fields.append(base + numpy(pred["scene_flow"])[0])
-        tracks_world = np.stack([sample_nearest(field, query) for field in fields])
-        arrays["tracking_xyz"] = points_world_to_ref0(tracks_world, c2w[0]).astype(np.float32)
+        arrays["tracking_xyz"] = np.stack(tracks).astype(np.float32)
     return arrays
 
 
@@ -101,9 +129,12 @@ def main() -> int:
     parser.add_argument("--repo", type=Path, default=BENCHMARK_DIR / "external" / "any4d")
     parser.add_argument("--checkpoint", type=Path, default=BENCHMARK_DIR / "external" / "any4d" / "checkpoints" / "any4d_4v_combined.pth")
     parser.add_argument("--device", default="cuda")
+    parser.add_argument("--max-views", type=int, default=16, help="Maximum anchor-inclusive views per forward pass")
     parser.add_argument("--tasks", default="tracking,depth,pose")
     args = parser.parse_args()
     tasks = parse_tasks(args.tasks, {"tracking", "depth", "pose"})
+    if args.max_views < 2:
+        raise ValueError("--max-views must be at least 2")
 
     model = _build_model(args.repo, args.checkpoint, args.device)
     from any4d.utils.image import load_images
@@ -125,10 +156,29 @@ def main() -> int:
             patch_size=14,
             compute_moge_mask=False,
         )
-        result = loss_of_one_batch_multi_view(views, model, None, args.device, use_amp=True)
-        arrays.update(_extract(result, args.tracking_gt, record, pending))
+        target_chunks = [
+            list(range(start, min(start + args.max_views - 1, len(views))))
+            for start in range(1, len(views), args.max_views - 1)
+        ]
+        chunk_indices = [[0, *targets] for targets in target_chunks]
+        result_chunks = (
+            (
+                loss_of_one_batch_multi_view([views[index] for index in indices], model, None, args.device, use_amp=True),
+                indices,
+            )
+            for indices in chunk_indices
+        )
+        arrays.update(_extract_chunks(result_chunks, args.tracking_gt, record, pending))
         model_hw = list(views[0]["img"].shape[-2:])
-        save_prediction(output, arrays, record, "any4d", MODEL_REVISION, started_at, {"model_hw": model_hw})
+        save_prediction(
+            output,
+            arrays,
+            record,
+            "any4d",
+            MODEL_REVISION,
+            started_at,
+            {"model_hw": model_hw, "max_views": args.max_views},
+        )
         print(f"[{index}/{len(records)}] {record.sequence_id} -> {output}")
     return 0
 

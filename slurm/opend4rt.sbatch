@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-BENCHMARK_DIR="${BENCHMARK_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+BENCHMARK_DIR="${BENCHMARK_DIR:-${SLURM_SUBMIT_DIR:-$(pwd)}}"
 PYTHON="${PYTHON:-/scratch/shared/beegfs/zeren/conda/envs/d4rt/bin/python}"
 TASKS="${TASKS:-tracking,depth,pose}"
 DEPTH_GRID_SIZE="${DEPTH_GRID_SIZE:-128}"

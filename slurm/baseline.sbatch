@@ -10,12 +10,13 @@
 
 set -euo pipefail
 
-BENCHMARK_DIR="${BENCHMARK_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+BENCHMARK_DIR="${BENCHMARK_DIR:-${SLURM_SUBMIT_DIR:-$(pwd)}}"
 MODEL="${MODEL:?set MODEL to v-dpm, any4d, traceanything, st4rtrack, or spatrackerv2}"
 PYTHON="${PYTHON:-python}"
 LIMIT="${LIMIT:-0}"
 NUM_SHARDS="${NUM_SHARDS:-1}"
 SHARD_INDEX="${SLURM_ARRAY_TASK_ID:-${SHARD_INDEX:-0}}"
+OVERWRITE="${OVERWRITE:-0}"
 
 case "$MODEL" in
   v-dpm)
@@ -47,16 +48,22 @@ esac
 TASKS="${TASKS:-$DEFAULT_TASKS}"
 OUTPUT="${OUTPUT:-$BENCHMARK_DIR/results/$MODEL/predictions}"
 export HF_HOME="${HF_HOME:-$BENCHMARK_DIR/.hf_cache}"
+export TORCH_HOME="${TORCH_HOME:-$HF_HOME/torch}"
 
-mkdir -p "$BENCHMARK_DIR/results/slurm" "$HF_HOME"
+mkdir -p "$BENCHMARK_DIR/results/slurm" "$HF_HOME" "$TORCH_HOME"
 cd "$BENCHMARK_DIR"
 echo "job=$SLURM_JOB_ID host=$(hostname) gpu=${CUDA_VISIBLE_DEVICES:-unset}"
 echo "model=$MODEL tasks=$TASKS shard=$SHARD_INDEX/$NUM_SHARDS limit=$LIMIT"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
-"$PYTHON" "$RUNNER" \
-  --tasks "$TASKS" \
-  --limit "$LIMIT" \
-  --output "$OUTPUT" \
-  --shard-index "$SHARD_INDEX" \
+RUN_ARGS=(
+  --tasks "$TASKS"
+  --limit "$LIMIT"
+  --output "$OUTPUT"
+  --shard-index "$SHARD_INDEX"
   --num-shards "$NUM_SHARDS"
+)
+if [[ "$OVERWRITE" == "1" ]]; then
+  RUN_ARGS+=(--overwrite)
+fi
+"$PYTHON" "$RUNNER" "${RUN_ARGS[@]}"

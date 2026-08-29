@@ -50,7 +50,7 @@ def main() -> int:
     add_selection_arguments(parser)
     parser.add_argument("--output", type=Path, default=BENCHMARK_DIR / "results" / "st4rtrack" / "predictions")
     parser.add_argument("--repo", type=Path, default=BENCHMARK_DIR / "external" / "st4rtrack")
-    parser.add_argument("--checkpoint", default="yupengchengg147/St4RTrack")
+    parser.add_argument("--checkpoint", default="yupengchengg147/St4rTrack")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--image-size", type=int, choices=(224, 512), default=512)
     parser.add_argument("--batch-size", type=int, default=32)

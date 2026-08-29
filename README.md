@@ -54,6 +54,23 @@ motion into NaN.
 - Primary metrics are ATE RMSE, RPE translation RMSE, and mean RPE rotation in
   degrees. Absolute rotation error and relative-pose AUC are also reported.
 
+## Baseline results
+
+Official checkpoints at the revisions in [baselines.json](baselines.json) are
+evaluated on all 512 sequences. Values are macro-averages over sequences under
+the canonical alignment rules above. `—` denotes a task that the official
+method does not expose through a compatible inference interface.
+
+| Method | Track score ↑ | APD ↑ | Dynamic APD ↑ | EPE (m) ↓ | Depth AbsRel ↓ | Depth δ1 ↑ | Pose ATE (m) ↓ | RPE trans. (m) ↓ | RPE rot. (°) ↓ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Open-D4RT | 0.3043 | 0.3631 | 0.2317 | 2.3298 | 0.1290 | 0.8408 | 0.0676 | 0.0355 | 0.3872 |
+| 4RC | 0.4763 | 0.5848 | 0.3417 | 1.5925 | 0.0775 | 0.9195 | 0.0370 | 0.0218 | 0.1593 |
+| V-DPM | 0.4880 | 0.5774 | 0.3757 | 1.6371 | 0.0891 | 0.9022 | 0.0375 | 0.0265 | 0.1693 |
+| Any4D | 0.2776 | 0.3676 | 0.1701 | 1.8578 | 0.1040 | 0.8874 | 0.1611 | 0.1382 | 0.7645 |
+| TraceAnything | 0.2206 | 0.3240 | 0.1003 | 2.3577 | — | — | — | — | — |
+| St4RTrack | 0.2575 | 0.3302 | 0.1667 | 2.2390 | — | — | — | — | — |
+| SpaTrackerV2 | 0.4334 | 0.5452 | 0.2960 | 1.6163 | 0.0727 | 0.9210 | 0.0444 | 0.0332 | 0.1569 |
+
 ## Prediction contract
 
 Every model adapter writes:
@@ -246,17 +263,26 @@ python setup_baselines.py
 ```
 
 Model environments and checkpoints remain separate because their CUDA/PyTorch
-requirements conflict. Follow each official repository's installation and
-checkpoint instructions, then submit inference through Slurm. `PYTHON` must
-point to that model's environment:
+requirements conflict. On this cluster, prepare the isolated environments and
+official checkpoints with CPU Slurm jobs:
+
+```bash
+for model in v-dpm any4d traceanything st4rtrack spatrackerv2; do
+  MODEL="$model" sbatch slurm/setup_baseline_env.sbatch
+done
+```
+
+The jobs create ignored environments under `external/envs/` and caches under
+`.hf_cache/`; no GPU work runs during setup. Then submit inference through
+Slurm with `PYTHON` pointing to that model's environment:
 
 ```bash
 # One-sequence integration run
-MODEL=traceanything PYTHON=/path/to/traceanything/bin/python LIMIT=1 \
+MODEL=traceanything PYTHON="$PWD/external/envs/traceanything/bin/python" LIMIT=1 \
   sbatch slurm/baseline.sbatch
 
 # Full deterministic 16-way array, shown for SpaTrackerV2
-MODEL=spatrackerv2 PYTHON=/path/to/spatrackerv2/bin/python NUM_SHARDS=16 \
+MODEL=spatrackerv2 PYTHON="$PWD/external/envs/spatrackerv2/bin/python" NUM_SHARDS=16 \
   sbatch --array=0-15 slurm/baseline.sbatch
 
 # Score only the tasks that adapter supports
@@ -267,7 +293,9 @@ MODEL=spatrackerv2 TASKS=tracking,depth,pose \
 The generic launcher requests one GPU and 128 GB host memory. Adjust the Slurm
 memory/time directives to local policy if needed; TraceAnything's official
 release documents a 48 GB GPU for its examples. The adapters never launch GPU
-work on a login node.
+work on a login node. Any4D keeps frame 0 in every forward pass and stitches
+at most 16 views per pass in the frame-0 coordinate system; this is the
+canonical policy used to fit a 32-frame sequence on a 48 GB GPU.
 
 ## Tests
 
@@ -277,4 +305,4 @@ python -m pytest -q
 
 The tests cover perfect predictions, monocular scale invariance, invalid
 tracking rows, pose Sim(3) invariance, portable tracking-NPY round trips, and
-the baseline registry.
+the baseline registry, including Any4D's anchor-preserving chunk stitching.
