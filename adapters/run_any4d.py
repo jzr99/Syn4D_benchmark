@@ -140,7 +140,7 @@ def main() -> int:
     from any4d.utils.image import load_images
     from any4d.utils.inference import loss_of_one_batch_multi_view
 
-    records = select_records(read_manifest(args.manifest), args)
+    records = select_records(read_manifest(args.manifest, args.data_root), args)
     for index, record in enumerate(records, 1):
         output = prediction_path(args.output, record)
         arrays, pending = load_pending(output, tasks, args.overwrite)

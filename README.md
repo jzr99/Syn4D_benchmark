@@ -1,8 +1,8 @@
 # Syn4D multi-task benchmark
 
-This directory defines one reproducible benchmark over **every complete
-sequence** in `/work/kelvin/Syn4D/subsets/kaggle_eval`. It evaluates three
-outputs from the same 32-frame input clip:
+This repository defines one reproducible benchmark over **every complete
+sequence** in the public Syn4D evaluation release. It evaluates three outputs
+from the same 32-frame input clip:
 
 1. 3D point tracking;
 2. monocular video depth;
@@ -12,6 +12,75 @@ The checked-in [manifest](manifests/syn4d_all.jsonl) contains 512 sequences:
 4 render variants × 8 scenes × 8 base sequences × 2 cameras. The
 `even_camera_png` convenience mirror is not indexed because it duplicates RGB
 files and does not own independent ground truth.
+
+## Quick start: download and evaluate your model
+
+Clone the evaluator and install its lightweight scoring dependencies:
+
+```bash
+git clone https://github.com/jzr99/Syn4D_benchmark.git
+cd Syn4D_benchmark
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+Download the complete evaluation release from
+[Hugging Face](https://huggingface.co/datasets/Syn4D/Syn4D_Benchmark). The
+download is about 8.7 GiB and contains the 512 MP4 inputs, the fixed tracking
+annotations, the 16,384 sampled depth frames, and camera-pose metadata:
+
+```bash
+python download_benchmark.py --output data/release
+export SYN4D_DATA_ROOT="$PWD/data/release/challenge_eval"
+export SYN4D_TRACKING_GT="$PWD/data/release/benchmark/data/tracking_gt"
+```
+
+The downloader is resumable and rejects incomplete releases. Recheck an
+existing download without network access with:
+
+```bash
+python download_benchmark.py --output data/release --verify-only
+```
+
+For a task-specific download, pass for example `--tasks tracking` or
+`--tasks tracking,pose`. Videos are always included because they are the model
+inputs. Depth EXRs and camera CSVs are downloaded only when their corresponding
+tasks are selected.
+
+The resulting layout is:
+
+```text
+data/release/
+├── benchmark/data/tracking_gt/<variant>/<scene>/<sequence>.npy
+└── challenge_eval/<variant>/<scene>/
+    ├── mp4/<sequence>.mp4
+    ├── exr_layers/depth/<sequence>/<selected-frame>_depth.exr
+    └── ground_truth/meta_exr_csv/<sequence>_camera.csv
+```
+
+Run your model on frames `0, 6, ..., 186` from each MP4 and write one prediction
+file per sequence using the [prediction contract](#prediction-contract). The
+common scorer is model-independent:
+
+```bash
+python evaluate.py \
+  --predictions /path/to/your/predictions \
+  --tasks tracking,depth,pose \
+  --strict \
+  --output results/your-model/summary.json
+```
+
+You can start with one sequence by adding `--limit 1`. For tracking-only
+predictions, use `--tasks tracking`; no raw surface metadata, depth, or camera
+CSV is read. The bundled baseline adapters also work with the MP4-only input
+release: when source PNGs are absent they extract the 32 selected frames into
+`data/frame_cache/` (override with `SYN4D_FRAME_CACHE`).
+
+The evaluator and release are self-contained for scoring all three tasks.
+Official baseline implementations and checkpoints are intentionally not
+vendored; [setup_baselines.py](setup_baselines.py) retrieves their pinned
+upstream revisions when you want to reproduce the baseline table.
 
 ## Protocol
 
@@ -107,18 +176,18 @@ particular, `evaluate.py --tasks tracking` reads no Syn4D camera CSV, surface
 track, or other raw metadata. The raw surface metadata is needed only by the
 dense conversion stage used to generate the portable NPY files.
 
-## 1. Rebuild or audit the manifest
+## Rebuild or audit the manifest (maintainers)
 
 ```bash
 cd /path/to/Syn4D_benchmark
-python build_manifest.py
+python build_manifest.py --root /path/to/kaggle_eval
 ```
 
 Discovery fails if a selected RGB frame, camera CSV, depth directory, or
 tracking safetensor is missing. This keeps silent partial evaluations out of
 the leaderboard.
 
-## 2. Prepare fixed tracking ground truth
+## Prepare fixed tracking ground truth (maintainers)
 
 Depth and pose GT are read directly from the raw dataset. Tracking needs one
 preparation pass through the maintained Syn4D surface-track loader:
@@ -155,7 +224,7 @@ For a standalone checkout, set `CONVERTER=/path/to/syn4d_to_worldtrack.py`
 when submitting the conversion array. The released NPY files are already
 checked in; regeneration is not required to evaluate tracking predictions.
 
-## 3. Evaluate Open-D4RT first
+## Evaluate Open-D4RT
 
 GPU inference must be submitted through Slurm on this cluster. Start with a
 one-sequence pose/depth integration smoke test:
@@ -205,7 +274,7 @@ Use `--variants`, `--scenes`, and `--cameras` to shard jobs. The default
 Open-D4RT depth grid is 128×128 and is resized to GT resolution only for
 scoring; increase `--depth-grid-size` for a resolution study.
 
-## 4. Evaluate 4RC second
+## Evaluate 4RC
 
 The adapter targets the official checkout pinned in
 [adapters/4RC_REVISION](adapters/4RC_REVISION). It samples the released dense
@@ -238,7 +307,7 @@ Likewise, use `MODEL=4rc` with `slurm/score.sbatch` after the 4RC array.
 stores downloaded weights in the repository-level `.hf_cache/` and records the
 model revision in every prediction NPZ.
 
-## 5. Additional 3D-tracking baselines
+## Additional 3D-tracking baselines
 
 The benchmark includes adapters for the official V-DPM, Any4D,
 TraceAnything, St4RTrack, and SpaTrackerV2 releases. They consume the same

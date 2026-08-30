@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any, Iterable
@@ -15,7 +16,12 @@ BENCHMARK_DIR = Path(__file__).resolve().parents[1]
 
 def add_selection_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--manifest", type=Path, default=BENCHMARK_DIR / "manifests" / "syn4d_all.jsonl")
-    parser.add_argument("--tracking-gt", type=Path, default=BENCHMARK_DIR / "data" / "tracking_gt")
+    parser.add_argument("--data-root", type=Path, default=None)
+    parser.add_argument(
+        "--tracking-gt",
+        type=Path,
+        default=Path(os.environ.get("SYN4D_TRACKING_GT", BENCHMARK_DIR / "data" / "tracking_gt")),
+    )
     parser.add_argument("--variants", default="")
     parser.add_argument("--scenes", default="")
     parser.add_argument("--cameras", default="")
@@ -52,8 +58,56 @@ def select_records(records, args):
     return selected[: args.limit] if args.limit > 0 else selected
 
 
+def video_path(record) -> Path:
+    return Path(record.rgb_dir).parents[1] / "mp4" / f"{record.sequence}.mp4"
+
+
 def image_paths(record) -> list[str]:
-    return [str(Path(record.rgb_dir) / f"{record.sequence}_{frame:04d}.png") for frame in record.frame_indices]
+    """Return selected RGB frames, extracting them from the release MP4 if needed."""
+    source_paths = [Path(record.rgb_dir) / f"{record.sequence}_{frame:04d}.png" for frame in record.frame_indices]
+    if all(path.is_file() for path in source_paths):
+        return [str(path) for path in source_paths]
+
+    video = video_path(record)
+    if not video.is_file():
+        raise FileNotFoundError(
+            f"Neither the selected PNG frames nor release video exists for {record.sequence_id}: {video}"
+        )
+
+    cache_root = Path(os.environ.get("SYN4D_FRAME_CACHE", BENCHMARK_DIR / "data" / "frame_cache"))
+    output_dir = cache_root / record.variant / record.scene / record.sequence
+    output_paths = [output_dir / f"{record.sequence}_{frame:04d}.png" for frame in record.frame_indices]
+    if all(path.is_file() for path in output_paths):
+        return [str(path) for path in output_paths]
+
+    import cv2
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    selected = dict(zip(record.frame_indices, output_paths))
+    capture = cv2.VideoCapture(str(video))
+    if not capture.isOpened():
+        raise RuntimeError(f"Could not open release video {video}")
+    written: set[int] = set()
+    frame_index = 0
+    try:
+        while len(written) < len(selected):
+            ok, frame = capture.read()
+            if not ok:
+                break
+            output = selected.get(frame_index)
+            if output is not None:
+                temporary = output.with_name(f".{output.stem}.{os.getpid()}.tmp.png")
+                if not cv2.imwrite(str(temporary), frame):
+                    raise RuntimeError(f"Could not write decoded frame {temporary}")
+                temporary.replace(output)
+                written.add(frame_index)
+            frame_index += 1
+    finally:
+        capture.release()
+    missing = sorted(set(selected) - written)
+    if missing:
+        raise RuntimeError(f"Video {video} ended before benchmark frames {missing[:5]}")
+    return [str(path) for path in output_paths]
 
 
 def query_pixels(tracking_root: Path, record, target_hw: tuple[int, int]) -> np.ndarray:

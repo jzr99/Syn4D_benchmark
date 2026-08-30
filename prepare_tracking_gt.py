@@ -94,6 +94,7 @@ def main() -> int:
     benchmark_dir = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=benchmark_dir / "manifests" / "syn4d_all.jsonl")
+    parser.add_argument("--data-root", type=Path, default=None)
     parser.add_argument("--dense-root", type=Path, default=benchmark_dir / "data" / "worldtrack_dense")
     parser.add_argument("--dense-subset-template", default="syn4d_all_{variant}")
     parser.add_argument("--output", type=Path, default=benchmark_dir / "data" / "tracking_gt")
@@ -115,7 +116,7 @@ def main() -> int:
     parser.add_argument("--metadata-root", default="/scratch/shared/beegfs/zeren/Syn4D/metadata")
     parser.add_argument("--fallback-metadata-root", default="/scratch/shared/beegfs/kelvin/Syn4D/metadata")
     args = parser.parse_args()
-    records = read_manifest(args.manifest)
+    records = read_manifest(args.manifest, args.data_root)
     variants = {value for value in args.variants.split(",") if value}
     scenes = {value for value in args.scenes.split(",") if value}
     cameras = {int(value) for value in args.cameras.split(",") if value}

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -17,6 +18,7 @@ if str(BENCHMARK_DIR) not in sys.path:
 
 from syn4d_benchmark.data import load_tracking_gt, prediction_path, tracking_gt_path
 from syn4d_benchmark.manifest import SequenceRecord, read_manifest
+from adapters.common import image_paths
 
 
 def _selected(records, variants: str, scenes: str, cameras: str, shard_index: int, num_shards: int, limit: int):
@@ -104,7 +106,12 @@ def _extract(predictions, record: SequenceRecord, tracking_gt: Path, tasks: set[
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=BENCHMARK_DIR / "manifests" / "syn4d_all.jsonl")
-    parser.add_argument("--tracking-gt", type=Path, default=BENCHMARK_DIR / "data" / "tracking_gt")
+    parser.add_argument("--data-root", type=Path, default=None)
+    parser.add_argument(
+        "--tracking-gt",
+        type=Path,
+        default=Path(os.environ.get("SYN4D_TRACKING_GT", BENCHMARK_DIR / "data" / "tracking_gt")),
+    )
     parser.add_argument("--output", type=Path, default=BENCHMARK_DIR / "results" / "4rc" / "predictions")
     parser.add_argument("--repo", type=Path, default=BENCHMARK_DIR.parent / "4RC")
     parser.add_argument("--checkpoint", default="Luo-Yihang/4RC")
@@ -129,7 +136,7 @@ def main() -> int:
     device = torch.device(args.device)
     model = Arc.from_pretrained(args.checkpoint).to(device).eval()
     records = _selected(
-        read_manifest(args.manifest), args.variants, args.scenes, args.cameras,
+        read_manifest(args.manifest, args.data_root), args.variants, args.scenes, args.cameras,
         args.shard_index, args.num_shards, args.limit,
     )
     task_keys = {"tracking": "tracking_xyz", "depth": "depth", "pose": "camera_c2w"}
@@ -144,15 +151,15 @@ def main() -> int:
             if not pending:
                 print(f"[{index}/{len(records)}] resume {record.sequence_id}")
                 continue
-        image_paths = [str(Path(record.rgb_dir) / f"{record.sequence}_{frame:04d}.png") for frame in record.frame_indices]
+        image_paths_for_record = image_paths(record)
         start = time.time()
         try:
-            predictions, profiling = _infer(model, image_paths, args.size, device)
+            predictions, profiling = _infer(model, image_paths_for_record, args.size, device)
         except torch.cuda.OutOfMemoryError:
             torch.cuda.empty_cache()
             fallback = min(args.size, 336)
             print(f"OOM at size={args.size}; retrying {record.sequence_id} at size={fallback}")
-            predictions, profiling = _infer(model, image_paths, fallback, device)
+            predictions, profiling = _infer(model, image_paths_for_record, fallback, device)
         arrays.update(_extract(predictions, record, args.tracking_gt, pending))
         arrays["frame_indices"] = np.asarray(record.frame_indices, dtype=np.int32)
         arrays["model"] = np.asarray("4rc")

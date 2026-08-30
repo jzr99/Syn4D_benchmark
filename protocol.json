@@ -2,7 +2,9 @@
   "name": "Syn4D Multi-Task Benchmark",
   "version": "1.0",
   "input": {
-    "root": "/work/kelvin/Syn4D/subsets/kaggle_eval",
+    "root_env": "SYN4D_DATA_ROOT",
+    "cluster_default_root": "/work/kelvin/Syn4D/subsets/kaggle_eval",
+    "video": "<variant>/<scene>/mp4/<sequence>.mp4",
     "frames": [0, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90, 96, 102, 108, 114, 120, 126, 132, 138, 144, 150, 156, 162, 168, 174, 180, 186],
     "variants": ["og", "sim", "mixed", "mixed_no_bedlam"],
     "scenes": ["antiquity", "dream", "gothic", "office", "outpost", "space", "street", "triplex"],

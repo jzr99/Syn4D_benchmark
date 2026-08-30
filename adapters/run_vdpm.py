@@ -114,7 +114,7 @@ def main() -> int:
     model = _build_model(args.repo, args.checkpoint, args.device)
     import torch
     from util.vggt import preprocess_images
-    records = select_records(read_manifest(args.manifest), args)
+    records = select_records(read_manifest(args.manifest, args.data_root), args)
     for index, record in enumerate(records, 1):
         output = prediction_path(args.output, record)
         arrays, pending = load_pending(output, tasks, args.overwrite)

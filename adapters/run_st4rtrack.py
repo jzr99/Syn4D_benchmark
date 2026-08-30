@@ -64,7 +64,7 @@ def main() -> int:
     from dust3r.utils.image import load_images
 
     model = AsymmetricCroCo3DStereo.from_pretrained(args.checkpoint).to(args.device).eval()
-    records = select_records(read_manifest(args.manifest), args)
+    records = select_records(read_manifest(args.manifest, args.data_root), args)
     for index, record in enumerate(records, 1):
         output_path = prediction_path(args.output, record)
         arrays, pending = load_pending(output_path, tasks, args.overwrite)

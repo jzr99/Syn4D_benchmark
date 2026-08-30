@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -50,8 +51,13 @@ def _filter(records: list[SequenceRecord], variants: str, scenes: str, cameras: 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=Path(__file__).parent / "manifests" / "syn4d_all.jsonl")
+    parser.add_argument("--data-root", type=Path, default=None)
     parser.add_argument("--predictions", type=Path, required=True)
-    parser.add_argument("--tracking-gt", type=Path, default=Path(__file__).parent / "data" / "tracking_gt")
+    parser.add_argument(
+        "--tracking-gt",
+        type=Path,
+        default=Path(os.environ.get("SYN4D_TRACKING_GT", Path(__file__).parent / "data" / "tracking_gt")),
+    )
     parser.add_argument("--tasks", default="tracking,depth,pose")
     parser.add_argument("--depth-align", choices=("scale", "scale_shift", "metric"), default="scale")
     parser.add_argument("--variants", default="")
@@ -66,7 +72,7 @@ def main() -> int:
     unknown = tasks - {"tracking", "depth", "pose"}
     if unknown:
         raise ValueError(f"Unknown tasks: {sorted(unknown)}")
-    records = _filter(read_manifest(args.manifest), args.variants, args.scenes, args.cameras)
+    records = _filter(read_manifest(args.manifest, args.data_root), args.variants, args.scenes, args.cameras)
     if args.limit > 0:
         records = records[: args.limit]
     task_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)

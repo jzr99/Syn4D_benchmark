@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
+import os
 import struct
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 
 from .protocol import DEFAULT_FRAME_INDICES
+
+
+DEFAULT_DATA_ROOT = Path("/work/kelvin/Syn4D/subsets/kaggle_eval")
+_PATH_FIELDS = ("rgb_dir", "depth_dir", "camera_csv", "tracking_safetensors")
 
 
 @dataclass(frozen=True)
@@ -70,10 +75,10 @@ def discover_sequences(root: Path, frame_indices: Iterable[int] = DEFAULT_FRAME_
                         scene=scene_dir.name,
                         sequence=sequence,
                         camera=camera,
-                        rgb_dir=str(rgb_dir),
-                        depth_dir=str(depth_dir),
-                        camera_csv=str(camera_csv),
-                        tracking_safetensors=str(tracking),
+                        rgb_dir=rgb_dir.relative_to(root).as_posix(),
+                        depth_dir=depth_dir.relative_to(root).as_posix(),
+                        camera_csv=camera_csv.relative_to(root).as_posix(),
+                        tracking_safetensors=tracking.relative_to(root).as_posix(),
                         frame_indices=selected,
                         width=int(width),
                         height=int(height),
@@ -90,6 +95,25 @@ def write_manifest(records: Iterable[SequenceRecord], path: Path) -> None:
             handle.write(json.dumps(asdict(record), sort_keys=True) + "\n")
 
 
-def read_manifest(path: Path) -> list[SequenceRecord]:
+def read_manifest(path: Path, data_root: Path | None = None) -> list[SequenceRecord]:
+    """Read records and resolve portable paths against the Syn4D data root.
+
+    Absolute paths in older/custom manifests remain unchanged. Relative paths
+    use ``data_root``, then ``SYN4D_DATA_ROOT``, and finally the cluster's
+    canonical kaggle_eval location.
+    """
+    if data_root is None:
+        data_root = Path(os.environ.get("SYN4D_DATA_ROOT", DEFAULT_DATA_ROOT))
+    data_root = Path(data_root).expanduser().resolve()
+    records = []
     with Path(path).open(encoding="utf-8") as handle:
-        return [SequenceRecord(**json.loads(line)) for line in handle if line.strip()]
+        for line in handle:
+            if not line.strip():
+                continue
+            payload = json.loads(line)
+            for field in _PATH_FIELDS:
+                value = Path(payload[field])
+                if not value.is_absolute():
+                    payload[field] = str(data_root / value)
+            records.append(SequenceRecord(**payload))
+    return records

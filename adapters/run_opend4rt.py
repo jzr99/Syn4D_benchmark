@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -17,14 +18,15 @@ if str(BENCHMARK_DIR) not in sys.path:
 
 from syn4d_benchmark.data import load_tracking_gt, prediction_path, tracking_gt_path
 from syn4d_benchmark.manifest import SequenceRecord, read_manifest
+from adapters.common import image_paths
 
 
 def _load_video(record: SequenceRecord) -> np.ndarray:
     import cv2
 
     frames = []
-    for frame in record.frame_indices:
-        path = Path(record.rgb_dir) / f"{record.sequence}_{frame:04d}.png"
+    for path_string in image_paths(record):
+        path = Path(path_string)
         bgr = cv2.imread(str(path), cv2.IMREAD_COLOR)
         if bgr is None:
             raise FileNotFoundError(path)
@@ -81,7 +83,12 @@ def _select(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=BENCHMARK_DIR / "manifests" / "syn4d_all.jsonl")
-    parser.add_argument("--tracking-gt", type=Path, default=BENCHMARK_DIR / "data" / "tracking_gt")
+    parser.add_argument("--data-root", type=Path, default=None)
+    parser.add_argument(
+        "--tracking-gt",
+        type=Path,
+        default=Path(os.environ.get("SYN4D_TRACKING_GT", BENCHMARK_DIR / "data" / "tracking_gt")),
+    )
     parser.add_argument("--output", type=Path, default=BENCHMARK_DIR / "results" / "opend4rt" / "predictions")
     parser.add_argument("--repo", type=Path, default=BENCHMARK_DIR.parent / "Open-d4rt")
     parser.add_argument("--checkpoint", type=Path, default=BENCHMARK_DIR.parent / "Open-d4rt" / "checkpoints" / "OpenD4RT_32CLIP_9Dataset_NoAUG" / "opend4rt.ckpt")
@@ -120,7 +127,7 @@ def main() -> int:
     image_size = cfg.get_path("model.input.image_size", [256, 256])
     model_hw = (int(image_size[0]), int(image_size[1]))
     records = _select(
-        read_manifest(args.manifest),
+        read_manifest(args.manifest, args.data_root),
         args.variants,
         args.scenes,
         args.cameras,

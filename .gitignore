@@ -4,6 +4,8 @@ __pycache__/
 .hf_cache/
 .pip_cache/
 data/worldtrack_dense/
+data/frame_cache/
+data/release/
 data/tracking_gt/**/*.npz
 external/
 predictions/

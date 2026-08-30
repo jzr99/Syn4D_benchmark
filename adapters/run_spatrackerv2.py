@@ -71,7 +71,7 @@ def main() -> int:
     tracker.eval()
     tracker.to(args.device)
 
-    records = select_records(read_manifest(args.manifest), args)
+    records = select_records(read_manifest(args.manifest, args.data_root), args)
     for index, record in enumerate(records, 1):
         output = prediction_path(args.output, record)
         arrays, pending = load_pending(output, tasks, args.overwrite)
