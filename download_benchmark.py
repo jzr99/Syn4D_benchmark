@@ -21,16 +21,25 @@ def _tasks(value: str) -> set[str]:
 
 
 def _patterns(tasks: set[str]) -> list[str]:
-    patterns = ["benchmark/**", "challenge_eval/*/*/mp4/*.mp4"]
+    patterns = [
+        "benchmark/README.md",
+        "benchmark/SHA256SUMS",
+        "benchmark/baselines.json",
+        "benchmark/protocol.json",
+        "benchmark/sequences.jsonl",
+        "benchmark/challenge_eval/*/*/mp4/*.mp4",
+    ]
+    if "tracking" in tasks:
+        patterns.append("benchmark/data/tracking_gt/**")
     if "depth" in tasks:
-        patterns.append("challenge_eval/*/*/exr_layers/depth/**/*.exr")
+        patterns.append("benchmark/challenge_eval/*/*/exr_layers/depth/**/*.exr")
     if "pose" in tasks:
-        patterns.append("challenge_eval/*/*/ground_truth/meta_exr_csv/*.csv")
+        patterns.append("benchmark/challenge_eval/*/*/ground_truth/meta_exr_csv/*.csv")
     return patterns
 
 
 def validate_release(root: Path, tasks: set[str]) -> dict[str, int]:
-    data_root = root / "challenge_eval"
+    data_root = root / "benchmark" / "challenge_eval"
     counts = {
         "videos": len(list(data_root.glob("*/*/mp4/*.mp4"))),
         "tracking": len(list((root / "benchmark" / "data" / "tracking_gt").glob("*/*/*.npy"))),
@@ -72,7 +81,7 @@ def main() -> int:
     counts = validate_release(output, args.tasks)
     print(f"Syn4D release validated at {output}")
     print(" ".join(f"{name}={count}" for name, count in counts.items()))
-    print(f'export SYN4D_DATA_ROOT="{output / "challenge_eval"}"')
+    print(f'export SYN4D_DATA_ROOT="{output / "benchmark" / "challenge_eval"}"')
     print(f'export SYN4D_TRACKING_GT="{output / "benchmark" / "data" / "tracking_gt"}"')
     return 0
 

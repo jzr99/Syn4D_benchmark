@@ -32,7 +32,7 @@ annotations, the 16,384 sampled depth frames, and camera-pose metadata:
 
 ```bash
 python download_benchmark.py --output data/release
-export SYN4D_DATA_ROOT="$PWD/data/release/challenge_eval"
+export SYN4D_DATA_ROOT="$PWD/data/release/benchmark/challenge_eval"
 export SYN4D_TRACKING_GT="$PWD/data/release/benchmark/data/tracking_gt"
 ```
 
@@ -52,11 +52,12 @@ The resulting layout is:
 
 ```text
 data/release/
-├── benchmark/data/tracking_gt/<variant>/<scene>/<sequence>.npy
-└── challenge_eval/<variant>/<scene>/
-    ├── mp4/<sequence>.mp4
-    ├── exr_layers/depth/<sequence>/<selected-frame>_depth.exr
-    └── ground_truth/meta_exr_csv/<sequence>_camera.csv
+└── benchmark/
+    ├── data/tracking_gt/<variant>/<scene>/<sequence>.npy
+    └── challenge_eval/<variant>/<scene>/
+        ├── mp4/<sequence>.mp4
+        ├── exr_layers/depth/<sequence>/<selected-frame>_depth.exr
+        └── ground_truth/meta_exr_csv/<sequence>_camera.csv
 ```
 
 Run your model on frames `0, 6, ..., 186` from each MP4 and write one prediction
